@@ -1,16 +1,10 @@
 <?php 
 include '../controls/connection.php';
 
-/*session_start();
-if ($_SESSION['role'] != 'admin') {
-    header("Location: index.php");
-    exit();
-}*/
-
-if (isset($_GET['delete'])) {
-    $user_id = $_GET['delete'];
-    $delete_query = "DELETE FROM users WHERE user_id = ?";
-    $stmt = $conn->prepare($delete_query);
+// --- HANDLE DELETE LABORER ---
+if (isset($_GET['delete_laborer'])) {
+    $user_id = $_GET['delete_laborer'];
+    $stmt = $conn->prepare("DELETE FROM users WHERE user_id = ?");
     $stmt->bind_param("i", $user_id);
     $stmt->execute();
     $stmt->close();
@@ -18,273 +12,342 @@ if (isset($_GET['delete'])) {
     exit();
 }
 
-if (isset($_GET['confirm'])) {
-    $report_id = $_GET['confirm'];
-    $user_id = $_GET['user_id'];
-    $report_reason = isset($_GET['reason']) ? $_GET['reason'] : '';
-
-    if (!empty($report_reason)) {
-        $deduction = 0;
-
-        switch ($report_reason) {
-            case 'false_information':
-                $deduction = 50;
-                break;
-            case 'nudity':
-                $deduction = 50;
-                break;
-            case 'harassment':
-                $deduction = 80;
-                break;
-            case 'spam':
-                $deduction = 20;
-                break;
-            case 'hate_speech':
-                $deduction = 30;
-                break;
-            case 'scam':
-                $deduction = 80;
-                break;
-            case 'other':
-                $deduction = 10;
-                break;
-        }
-
-        error_log("Deduction for report ID " . $report_id . ": " . $deduction);
-
-        $update_query = "UPDATE users SET credit_score = credit_score - ? WHERE user_id = ?";
-        $stmt = $conn->prepare($update_query);
-        $stmt->bind_param("ii", $deduction, $user_id);
-
-        if ($stmt->execute()) {
-            error_log("Credit score updated successfully for user_id: " . $user_id);
-
-            $update_report_query = "UPDATE reports SET status = 'confirmed' WHERE report_id = ?";
-            $stmt = $conn->prepare($update_report_query);
-            $stmt->bind_param("i", $report_id);
-            if ($stmt->execute()) {
-                error_log("Report ID " . $report_id . " marked as confirmed.");
-
-                $stmt->close();
-                header("Location: admin_dashboard.php");
-                exit();
-            } else {
-                error_log("Error updating report status for report_id: " . $report_id);
-            }
-        } else {
-            error_log("Error updating credit score for user_id: " . $user_id);
-        }
-
-        $stmt->close();
-    } else {
-        error_log("No report reason selected.");
-    }
-}
-
-// Handle report rejection
-if (isset($_GET['reject'])) {
-    $report_id = $_GET['reject'];
-
-    // Mark the report as rejected
-    $reject_query = "UPDATE reports SET status = 'rejected' WHERE report_id = ?";
-    $stmt = $conn->prepare($reject_query);
-    $stmt->bind_param("i", $report_id);
-
-    if ($stmt->execute()) {
-        error_log("Report ID " . $report_id . " marked as rejected.");
-    } else {
-        error_log("Error rejecting report ID: " . $report_id);
-    }
-
+// --- HANDLE DELETE LOCATION ---
+if (isset($_GET['delete_location'])) {
+    $location_id = $_GET['delete_location'];
+    $stmt = $conn->prepare("DELETE FROM locations WHERE location_id = ?");
+    $stmt->bind_param("i", $location_id);
+    $stmt->execute();
     $stmt->close();
-
-    // Redirect back to the admin dashboard
     header("Location: admin_dashboard.php");
     exit();
 }
 
-// Fetch total laborers count
-$laborers_query = "SELECT COUNT(*) AS total_laborers FROM users WHERE role = 'laborer'";
-$laborers_result = $conn->query($laborers_query);
-$laborers_count = ($laborers_result && $laborers_result->num_rows > 0) ? $laborers_result->fetch_assoc()['total_laborers'] : 0;
+// --- HANDLE ADD LOCATION ---
+$default_barangay = "Sta. Rita";
+$default_city = "Guiguinto";
+$default_province = "Bulacan";
 
-// Fetch total job postings count
-$jobs_query = "SELECT COUNT(*) AS total_jobs FROM jobs";
-$jobs_result = $conn->query($jobs_query);
-$jobs_count = ($jobs_result && $jobs_result->num_rows > 0) ? $jobs_result->fetch_assoc()['total_jobs'] : 0;
+if (isset($_POST['add_location'])) {
+    $location_name = $_POST['location_name'];
+    $stmt = $conn->prepare("INSERT INTO locations (location_name, barangay, city, province) VALUES (?, ?, ?, ?)");
+    $stmt->bind_param("ssss", $location_name, $default_barangay, $default_city, $default_province);
+    $stmt->execute();
+    $stmt->close();
+    header("Location: admin_dashboard.php");
+    exit();
+}
 
-// Fetch pending verification requests
-$verification_query = "SELECT v.request_id, v.user_id, v.id_proof, v.supporting_doc, v.status, u.firstname, u.lastname 
-                       FROM verification_requests v 
-                       JOIN users u ON v.user_id = u.user_id
-                       WHERE v.status = 'pending'";
-$verification_result = $conn->query($verification_query);
+// --- HANDLE EDIT LOCATION ---
+if (isset($_POST['edit_location'])) {
+    $location_id = $_POST['location_id'];
+    $location_name = $_POST['location_name'];
+    $stmt = $conn->prepare("UPDATE locations SET location_name = ? WHERE location_id = ?");
+    $stmt->bind_param("si", $location_name, $location_id);
+    $stmt->execute();
+    $stmt->close();
+    header("Location: admin_dashboard.php");
+    exit();
+}
 
-// Fetch pending reports
-$report_query = "SELECT r.report_id, r.user_id, r.reason, r.additional_details, r.status, u.firstname, u.lastname 
-                 FROM reports r 
-                 JOIN users u ON r.user_id = u.user_id 
-                 WHERE r.status = 'pending'";
-$report_result = $conn->query($report_query);
+// --- HANDLE ADD USER ---
+if (isset($_POST['add_user'])) {
+    $firstname = $_POST['firstname'];
+    $lastname = $_POST['lastname'];
+    $email = $_POST['email'];
+    $contact = $_POST['contact'];
+    $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
+    $role = $_POST['role'] ?? 'laborer';
+    $rating = $_POST['rating'] ?? 0;
+    $is_verified = $_POST['is_verified'] ?? 0;
 
-// Fetch all laborers
-$sql = "SELECT user_id, firstname, lastname, email, location, contact, rating, credit_score, is_verified FROM users WHERE role = 'laborer'";
-$result = $conn->query($sql);
+    $stmt = $conn->prepare("INSERT INTO users (firstname, lastname, email, contact, password, role, rating, is_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+    $stmt->bind_param("ssssssii", $firstname, $lastname, $email, $contact, $password, $role, $rating, $is_verified);
+    $stmt->execute();
+    $stmt->close();
+    header("Location: admin_dashboard.php");
+    exit();
+}
+
+// --- HANDLE EDIT USER ---
+if (isset($_POST['edit_user'])) {
+    $user_id = $_POST['user_id'];
+    $firstname = $_POST['firstname'];
+    $lastname = $_POST['lastname'];
+    $email = $_POST['email'];
+    $contact = $_POST['contact'];
+    $password = $_POST['password'] ?? ''; // optional
+    $role = $_POST['role'];
+    $rating = $_POST['rating'];
+    $is_verified = $_POST['is_verified'];
+
+    if (!empty($password)) {
+        $password = password_hash($password, PASSWORD_DEFAULT);
+        $stmt = $conn->prepare("UPDATE users SET firstname=?, lastname=?, email=?, contact=?, password=?, role=?, rating=?, is_verified=? WHERE user_id=?");
+        $stmt->bind_param("ssssssiii", $firstname, $lastname, $email, $contact, $password, $role, $rating, $is_verified, $user_id);
+    } else {
+        $stmt = $conn->prepare("UPDATE users SET firstname=?, lastname=?, email=?, contact=?, role=?, rating=?, is_verified=? WHERE user_id=?");
+        $stmt->bind_param("sssssiii", $firstname, $lastname, $email, $contact, $role, $rating, $is_verified, $user_id);
+    }
+
+    $stmt->execute();
+    $stmt->close();
+    header("Location: admin_dashboard.php");
+    exit();
+}
+
+// --- PAGINATION ---
+$limit_options = [10, 25, 50, 100];
+$limit = isset($_GET['limit']) && in_array($_GET['limit'], $limit_options) ? $_GET['limit'] : 10;
+$page = isset($_GET['page']) && is_numeric($_GET['page']) ? intval($_GET['page']) : 1;
+$start = ($page - 1) * $limit;
+
+// --- FETCH TOTALS ---
+$total_users = $conn->query("SELECT COUNT(*) AS total_users FROM users")->fetch_assoc()['total_users'] ?? 0;
+$total_locations = $conn->query("SELECT COUNT(*) AS total_locations FROM locations")->fetch_assoc()['total_locations'] ?? 0;
+
+// --- FETCH USERS ---
+$laborers_result = $conn->query("SELECT * FROM users ORDER BY user_id ASC LIMIT $start, $limit");
+
+// --- FETCH LOCATIONS ---
+$locations_result = $conn->query("SELECT * FROM locations");
+$total_pages = ceil($total_users / $limit);
 ?>
 
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
 </head>
+
 <body class="bg-gray-100">
-    <div class="flex h-screen">
-        <aside class="w-64 bg-blue-900 text-white p-5">
-            <h1 class="text-2xl font-bold mb-6">Admin Panel</h1>
-            <nav>
-                <ul>
-                    <li class="mb-4"><a href="admin_dashboard.php" class="block p-2 hover:bg-blue-700 rounded">Dashboard</a></li>
-                    <li class="mb-4"><a href="admin_jobs.php" class="block p-2 hover:bg-blue-700 rounded">Jobs</a></li>
-                    <li class="mb-4"><a href="admin_users.php" class="block p-2 hover:bg-blue-700 rounded">Users</a></li>
-                    <li class="mb-4"><a href="admin_verifications.php" class="block p-2 hover:bg-blue-700 rounded">View Applications</a></li>
-                    <li><a href="../controls/logout.php" class="block p-2 hover:bg-blue-700 rounded">Logout</a></li>
-                </ul>
-            </nav>
-        </aside>
+<div class="flex flex-col md:flex-row h-screen">
 
-        <main class="flex-1 p-6">
-            <h2 class="text-3xl font-semibold mb-6">Admin Dashboard</h2>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                <div class="bg-white p-6 rounded-lg shadow-md">
-                    <h3 class="text-xl font-semibold">Total Laborers</h3>
-                    <p class="text-2xl font-bold"><?php echo $laborers_count; ?></p>
-                </div>
-                <div class="bg-white p-6 rounded-lg shadow-md">
-                    <h3 class="text-xl font-semibold">Job Postings</h3>
-                    <p class="text-2xl font-bold"><?php echo $jobs_count; ?></p>
-                </div>
-                <div class="bg-white p-6 rounded-lg shadow-md">
-                    <h3 class="text-xl font-semibold">Reports</h3>
-                    <p class="text-2xl font-bold"><?php echo $report_result->num_rows; ?> Pending</p>
-                </div>
-            </div>
+  <!-- Mobile Navbar -->
+  <div class="md:hidden flex items-center justify-between bg-[#027B8C] text-white p-4">
+    <h1 class="text-xl font-bold">Admin Panel</h1>
+    <button id="menu-toggle" class="focus:outline-none">
+      <svg id="burger-icon" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none"
+        viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M4 6h16M4 12h16M4 18h16" />
+      </svg>
+      <svg id="close-icon" xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 hidden" fill="none"
+        viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M6 18L18 6M6 6l12 12" />
+      </svg>
+    </button>
+  </div>
 
-            <!-- Verification Applications Section -->
-            <div class="bg-white p-6 rounded-lg shadow-md mb-6">
-                <h3 class="text-2xl font-semibold mb-4">Verification Applications</h3>
-                <table class="w-full border-collapse border border-gray-200">
-                    <thead>
-                        <tr class="bg-gray-100">
-                            <th class="border p-2">User ID</th>
-                            <th class="border p-2">Name</th>
-                            <th class="border p-2">ID Proof</th>
-                            <th class="border p-2">Supporting Document</th>
-                            <th class="border p-2">Status</th>
-                            <th class="border p-2">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php
-                        while ($row = $verification_result->fetch_assoc()):
-                        ?>
-                            <tr class="border">
-                                <td class="border p-2"><?php echo $row['user_id']; ?></td>
-                                <td class="border p-2"><?php echo $row['firstname'] . " " . $row['lastname']; ?></td>
-                                <td class="border p-2"><a href="../uploads/<?php echo $row['id_proof']; ?>" target="_blank">View ID</a></td>
-                                <td class="border p-2"><a href="../uploads/<?php echo $row['supporting_doc']; ?>" target="_blank">View Document</a></td>
-                                <td class="border p-2"><?php echo ucfirst($row['status']); ?></td>
-                                <td class="border p-2">
-                                    <a href="view_user.php?user_id=<?php echo $row['user_id']; ?>" class="text-blue-500">View Profile</a> | 
-                                    <a href="../controls/admin/approve_verification.php?request_id=<?php echo $row['request_id']; ?>" class="text-green-500">Approve</a> | 
-                                    <a href="../controls/admin/reject_verification.php?request_id=<?php echo $row['request_id']; ?>" class="text-red-500">Reject</a>
-                                </td>
-                            </tr>
-                        <?php endwhile; ?>
-                    </tbody>
-                </table>
-            </div>
+  <!-- Sidebar -->
+  <aside id="sidebar"
+    class="w-64 bg-[#027B8C] text-white p-5 md:block fixed md:static top-0 left-0 h-full transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out z-50">
+    <h1 class="text-2xl font-bold mb-6 hidden md:block">Admin Panel</h1>
+    <nav>
+      <ul>
+        <li><a href="../controls/logout.php" class="block p-2 hover:bg-blue-700 rounded">Logout</a></li>
+      </ul>
+    </nav>
+  </aside>
 
-            <!-- Reports Section -->
-            <div class="bg-white p-6 rounded-lg shadow-md mb-6">
-                <h3 class="text-2xl font-semibold mb-4">Pending Reports</h3>
-                <table class="w-full border-collapse border border-gray-200">
-                    <thead>
-                        <tr class="bg-gray-100">
-                            <th class="border p-2">Report ID</th>
-                            <th class="border p-2">User ID</th>
-                            <th class="border p-2">Name</th>
-                            <th class="border p-2">Reason</th>
-                            <th class="border p-2">Details</th>
-                            <th class="border p-2">Status</th>
-                            <th class="border p-2">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php
-                        while ($row = $report_result->fetch_assoc()):
-                        ?>
-                            <tr class="border">
-                                <td class="border p-2"><?php echo $row['report_id']; ?></td>
-                                <td class="border p-2"><?php echo $row['user_id']; ?></td>
-                                <td class="border p-2"><?php echo $row['firstname'] . " " . $row['lastname']; ?></td>
-                                <td class="border p-2"><?php echo ucfirst($row['reason']); ?></td>
-                                <td class="border p-2"><?php echo $row['additional_details']; ?></td>
-                                <td class="border p-2"><?php echo ucfirst($row['status']); ?></td>
-                                <td class="border p-2">
-                                <a href="view_user.php?user_id=<?php echo $row['user_id']; ?>" class="text-blue-500">View Profile</a> | 
-                                <a href="?confirm=<?php echo $row['report_id']; ?>&user_id=<?php echo $row['user_id']; ?>&reason=<?php echo $row['reason']; ?>" class="text-green-500">Confirm</a> | 
-                                <a href="?reject=<?php echo $row['report_id']; ?>" class="text-red-500" onclick="return confirm('Are you sure you want to reject this report?')">Reject</a>
-                            </td>
-                            </tr>
-                        <?php endwhile; ?>
-                    </tbody>    
-                </table>
-            </div>
+  <!-- Main Content -->
+  <main class="flex-1 p-6 overflow-auto md:ml-0">
+    <h2 class="text-3xl font-semibold mb-6">Admin Dashboard</h2>
 
-            <!-- Laborers Management Section -->
-            <div class="bg-white p-6 rounded-lg shadow-md">
-                <h3 class="text-2xl font-semibold mb-4">Laborers Management</h3>
-                <table class="w-full border-collapse border border-gray-200">
-                    <thead>
-                        <tr class="bg-gray-100">
-                            <th class="border p-2">User ID</th>
-                            <th class="border p-2">First Name</th>
-                            <th class="border p-2">Last Name</th>
-                            <th class="border p-2">Email</th>
-                            <th class="border p-2">Location</th>
-                            <th class="border p-2">Contact</th>
-                            <th class="border p-2">Rating</th>
-                            <th class="border p-2">Credit Score</th>
-                            <th class="border p-2">Verified</th>
-                            <th class="border p-2">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php while ($row = $result->fetch_assoc()): ?>
-                            <tr class="border">
-                                <td class="border p-2"><?php echo $row['user_id']; ?></td>
-                                <td class="border p-2"><?php echo $row['firstname']; ?></td>
-                                <td class="border p-2"><?php echo $row['lastname']; ?></td>
-                                <td class="border p-2"><?php echo $row['email']; ?></td>
-                                <td class="border p-2"><?php echo $row['location']; ?></td>
-                                <td class="border p-2"><?php echo $row['contact']; ?></td>
-                                <td class="border p-2"><?php echo $row['rating']; ?></td>
-                                <td class="border p-2"><?php echo $row['credit_score']; ?></td>
-                                <td class="border p-2"><?php echo ($row['is_verified'] == 1) ? '✅ Yes' : '❌ No'; ?></td>
-                                <td class="border p-2">
-                                    <a href="?delete=<?php echo $row['user_id']; ?>" class="text-red-500" onclick="return confirm('Are you sure?')">Delete</a>
-                                </td>
-                            </tr>
-                        <?php endwhile; ?>
-                    </tbody>
-                </table>
-            </div>
-        </main>
+<!-- Stats -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+  <a href="#laborers-table" class="block">
+    <div class="bg-white p-6 rounded-lg shadow-md hover:bg-gray-100 cursor-pointer">
+      <h3 class="text-xl font-semibold">Total Users</h3>
+      <p class="text-2xl font-bold"><?php echo $total_users; ?></p>
     </div>
+  </a>
+  <a href="#locations-table" class="block">
+    <div class="bg-white p-6 rounded-lg shadow-md hover:bg-gray-100 cursor-pointer">
+      <h3 class="text-xl font-semibold">Total Locations</h3>
+      <p class="text-2xl font-bold"><?php echo $total_locations; ?></p>
+    </div>
+  </a>
+</div>
+
+<!-- Add User Form -->
+<button id="toggle-add-user" class="bg-blue-500 text-white px-4 py-2 rounded mb-4">Add New User</button>
+<div id="add-user-form" class="mb-4 overflow-hidden max-h-0 transition-all duration-500">
+<form method="POST" class="bg-gray-100 p-4 rounded grid grid-cols-1 md:grid-cols-2 gap-4">
+  <input type="text" name="firstname" placeholder="First Name" class="p-2 border rounded w-full" required>
+  <input type="text" name="lastname" placeholder="Last Name" class="p-2 border rounded w-full" required>
+  <input type="email" name="email" placeholder="Email" class="p-2 border rounded w-full" required>
+  <input type="text" name="contact" placeholder="Contact" class="p-2 border rounded w-full" required>
+  <input type="password" name="password" placeholder="Password" class="p-2 border rounded w-full">
+  <select name="role" class="p-2 border rounded w-full">
+    <option value="admin">Admin</option>
+    <option value="staff">Barangay Staff</option>
+    <option value="laborer" selected>Laborer</option>
+    <option value="user">User</option>
+  </select>
+  <input type="number" name="rating" placeholder="Rating" class="p-2 border rounded w-full" value="0">
+  <select name="is_verified" class="p-2 border rounded w-full">
+    <option value="0">Not Verified</option>
+    <option value="1">Verified</option>
+  </select>
+  <button type="submit" name="add_user" class="bg-green-500 text-white px-4 py-2 rounded mt-2 col-span-2">Save</button>
+</form>
+</div>
+
+<!-- Users Table -->
+<div id="laborers-table" class="bg-white p-6 rounded-lg shadow-md mb-6">
+  <h3 class="text-2xl font-semibold mb-4">Users Management</h3>
+  <form method="GET" class="mb-2">
+    <label>Show 
+      <select name="limit" onchange="this.form.submit()">
+        <?php foreach ($limit_options as $option): ?>
+          <option value="<?php echo $option; ?>" <?php echo $limit==$option?'selected':''; ?>><?php echo $option; ?></option>
+        <?php endforeach; ?>
+      </select>
+    </label>
+    <input type="hidden" name="page" value="1">
+  </form>
+
+  <!-- Scrollable wrapper -->
+  <div class="overflow-x-auto max-w-full">
+    <table class="min-w-[1200px] border-collapse border border-gray-200">
+      <thead>
+        <tr class="bg-gray-100">
+          <th class="border p-2">ID</th>
+          <th class="border p-2">First Name</th>
+          <th class="border p-2">Last Name</th>
+          <th class="border p-2">Email</th>
+          <th class="border p-2">Contact</th>
+          <th class="border p-2">Password</th>
+          <th class="border p-2">Role</th>
+          <th class="border p-2">Rating</th>
+          <th class="border p-2">Verified</th>
+          <th class="border p-2">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php while($row = $laborers_result->fetch_assoc()): ?>
+        <tr class="border">
+          <form method="POST">
+            <td class="border p-2"><?php echo $row['user_id']; ?><input type="hidden" name="user_id" value="<?php echo $row['user_id']; ?>"></td>
+            <td class="border p-2"><input type="text" name="firstname" value="<?php echo $row['firstname']; ?>" class="p-1 border rounded w-full"></td>
+            <td class="border p-2"><input type="text" name="lastname" value="<?php echo $row['lastname']; ?>" class="p-1 border rounded w-full"></td>
+            <td class="border p-2"><input type="email" name="email" value="<?php echo $row['email']; ?>" class="p-1 border rounded w-full"></td>
+            <td class="border p-2"><input type="text" name="contact" value="<?php echo $row['contact']; ?>" class="p-1 border rounded w-full"></td>
+            <td class="border p-2"><input type="password" name="password" placeholder="Leave blank to keep" class="p-1 border rounded w-full"></td>
+            <td class="border p-2">
+              <select name="role" class="p-1 border rounded w-full">
+                <option value="admin" <?php echo $row['role']=='admin'?'selected':''; ?>>Admin</option>
+                <option value="staff" <?php echo $row['role']=='staff'?'selected':''; ?>>Barangay Staff</option>
+                <option value="laborer" <?php echo $row['role']=='laborer'?'selected':''; ?>>Laborer</option>
+                <option value="user" <?php echo $row['role']=='user'?'selected':''; ?>>User</option>
+              </select>
+            </td>
+            <td class="border p-2"><input type="number" name="rating" value="<?php echo $row['rating']; ?>" class="p-1 border rounded w-full"></td>
+            <td class="border p-2">
+              <select name="is_verified" class="p-1 border rounded w-full">
+                <option value="0" <?php echo $row['is_verified']==0?'selected':''; ?>>No</option>
+                <option value="1" <?php echo $row['is_verified']==1?'selected':''; ?>>Yes</option>
+              </select>
+            </td>
+            <td class="border p-2 flex gap-2">
+              <button type="submit" name="edit_user" class="text-blue-500">Save</button>
+              <a href="?delete_laborer=<?php echo $row['user_id']; ?>" class="text-red-500" onclick="return confirm('Are you sure?')">Delete</a>
+            </td>
+          </form>
+        </tr>
+        <?php endwhile; ?>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  <div class="mt-2 flex gap-2">
+    <?php if($page > 1): ?>
+      <a href="?page=<?php echo $page-1; ?>&limit=<?php echo $limit; ?>" class="px-3 py-1 bg-gray-200 rounded">Prev</a>
+    <?php endif; ?>
+    <?php for($p=1;$p<=$total_pages;$p++): ?>
+      <a href="?page=<?php echo $p; ?>&limit=<?php echo $limit; ?>" class="px-3 py-1 <?php echo $p==$page?'bg-blue-500 text-white rounded':'bg-gray-200 rounded'; ?>"><?php echo $p; ?></a>
+    <?php endfor; ?>
+    <?php if($page < $total_pages): ?>
+      <a href="?page=<?php echo $page+1; ?>&limit=<?php echo $limit; ?>" class="px-3 py-1 bg-gray-200 rounded">Next</a>
+    <?php endif; ?>
+  </div>
+</div>
+
+<!-- Locations Table -->
+<div id="locations-table" class="bg-white p-6 rounded-lg shadow-md">
+  <h3 class="text-2xl font-semibold mb-4">Locations Management</h3>
+
+  <button id="toggle-add-location" class="bg-blue-500 text-white px-4 py-2 rounded mb-4">Add New Location</button>
+  <div id="add-location-form" class="mb-4 overflow-hidden max-h-0 transition-all duration-500">
+    <form method="POST" class="bg-gray-100 p-4 rounded grid grid-cols-1 md:grid-cols-2 gap-4">
+      <input type="text" name="location_name" placeholder="Location Name" class="p-2 border rounded w-full" required>
+      <input type="text" name="barangay" value="<?php echo $default_barangay; ?>" readonly class="p-2 border rounded w-full">
+      <input type="text" name="city" value="<?php echo $default_city; ?>" readonly class="p-2 border rounded w-full">
+      <input type="text" name="province" value="<?php echo $default_province; ?>" readonly class="p-2 border rounded w-full">
+      <button type="submit" name="add_location" class="bg-green-500 text-white px-4 py-2 rounded mt-2 col-span-2">Save</button>
+    </form>
+  </div>
+
+  <div class="overflow-x-auto max-w-full">
+    <table class="min-w-[900px] border-collapse border border-gray-200">
+      <thead>
+        <tr class="bg-gray-100">
+          <th class="border p-2">Location ID</th>
+          <th class="border p-2">Location Name</th>
+          <th class="border p-2">Barangay</th>
+          <th class="border p-2">City</th>
+          <th class="border p-2">Province</th>
+          <th class="border p-2">Created At</th>
+          <th class="border p-2">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php while($row = $locations_result->fetch_assoc()): ?>
+        <tr class="border">
+          <form method="POST">
+            <td class="border p-2"><?php echo $row['location_id']; ?><input type="hidden" name="location_id" value="<?php echo $row['location_id']; ?>"></td>
+            <td class="border p-2"><input type="text" name="location_name" value="<?php echo $row['location_name']; ?>" class="p-1 border rounded w-full"></td>
+            <td class="border p-2"><?php echo $row['barangay']; ?></td>
+            <td class="border p-2"><?php echo $row['city']; ?></td>
+            <td class="border p-2"><?php echo $row['province']; ?></td>
+            <td class="border p-2"><?php echo $row['created_at']; ?></td>
+            <td class="border p-2 flex gap-2">
+              <button type="submit" name="edit_location" class="text-blue-500">Save</button>
+              <a href="?delete_location=<?php echo $row['location_id']; ?>" class="text-red-500" onclick="return confirm('Are you sure?')">Delete</a>
+            </td>
+          </form>
+        </tr>
+        <?php endwhile; ?>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+</main>
+</div>
+
+<script>
+document.getElementById('menu-toggle').addEventListener('click', function() {
+  document.getElementById('sidebar').classList.toggle('-translate-x-full');
+  document.getElementById('burger-icon').classList.toggle('hidden');
+  document.getElementById('close-icon').classList.toggle('hidden');
+});
+
+document.getElementById('toggle-add-user').addEventListener('click', function() {
+  const form = document.getElementById('add-user-form');
+  form.style.maxHeight = form.style.maxHeight === '0px' || !form.style.maxHeight ? form.scrollHeight + 'px' : '0px';
+});
+
+document.getElementById('toggle-add-location').addEventListener('click', function() {
+  const form = document.getElementById('add-location-form');
+  form.style.maxHeight = form.style.maxHeight === '0px' || !form.style.maxHeight ? form.scrollHeight + 'px' : '0px';
+});
+</script>
 </body>
 </html>
-
-<?php $conn->close(); ?>

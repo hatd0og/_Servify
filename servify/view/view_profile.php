@@ -36,6 +36,8 @@ $services_result = $services_stmt->get_result();
 $services_stmt->close();
 
 $conn->close();
+
+$is_logged_in = isset($_SESSION['user_id']);
 ?>
 
 <!DOCTYPE html>

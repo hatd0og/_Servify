@@ -28,6 +28,6 @@ if (isset($_GET['request_id'])) {
     $stmt->close();
 
     $conn->close();
-    header("Location: http://localhost/servify/view/admin_dashboard.php");
+    header("Location: http://localhost/servify/view/barangay_staff_dashboard.php");
 }
 ?>
